@@ -22,7 +22,6 @@ LOG_RETENTION_MAPPING = {
     30: logs.RetentionDays.ONE_MONTH,
 }
 
-
 KUBERNETES_VERSION_MAPPING = {
     "1.30": eks.KubernetesVersion.V1_30,
 }
@@ -77,7 +76,7 @@ class PlatformStack(Stack):
             endpoint_access=eks.EndpointAccess.PUBLIC_AND_PRIVATE,
         )
 
-        cluster.add_nodegroup_capacity(
+        node_group = cluster.add_nodegroup_capacity(
             "PlatformManagedNodeGroup",
             desired_size=environment_config["node_count"],
             min_size=platform_config["node_group"]["min_size"],
@@ -137,6 +136,8 @@ class PlatformStack(Stack):
             release=ingress_config["release"],
             namespace=ingress_config["namespace"],
             create_namespace=True,
+            wait=False,
+            timeout=Duration.minutes(15),
             values={
                 "controller": {
                     "replicaCount": helm_config_resource.get_att_string(
@@ -145,20 +146,37 @@ class PlatformStack(Stack):
                     "service": {
                         "type": ingress_config["service_type"]
                     },
+                    "admissionWebhooks": {
+                        "enabled": ingress_config["admission_webhooks_enabled"]
+                    },
+                    "resources": {
+                        "requests": {
+                            "cpu": ingress_config["resources"]["requests"]["cpu"],
+                            "memory": ingress_config["resources"]["requests"]["memory"],
+                        },
+                        "limits": {
+                            "cpu": ingress_config["resources"]["limits"]["cpu"],
+                            "memory": ingress_config["resources"]["limits"]["memory"],
+                        },
+                    },
                 }
             },
         )
 
+        ingress_chart.node.add_dependency(node_group)
         ingress_chart.node.add_dependency(helm_config_resource)
 
         CfnOutput(self, "ClusterName", value=cluster.cluster_name)
         CfnOutput(self, "ClusterArn", value=cluster.cluster_arn)
+
         CfnOutput(
             self,
             "EnvironmentParameterName",
             value=env_parameter.parameter_name,
         )
+
         CfnOutput(self, "Environment", value=env_name)
+
         CfnOutput(
             self,
             "HelmConfigFunctionArn",

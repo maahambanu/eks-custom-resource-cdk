@@ -39,7 +39,7 @@
       },
       "eks": {
         "version": "1.30",
-        "instance_type": "t3.medium",
+        "instance_type": "t3.micro",
         "disk_size": 20
       },
       "lambda": {
@@ -49,13 +49,24 @@
         "log_level": "INFO"
       },
       "ingress_nginx": {
-        "repository": "https://kubernetes.github.io/ingress-nginx",
-        "chart": "ingress-nginx",
-        "version": "4.12.1",
-        "release": "ingress-nginx",
-        "namespace": "ingress-nginx",
-        "service_type": "ClusterIP"
+      "repository": "https://kubernetes.github.io/ingress-nginx",
+      "chart": "ingress-nginx",
+      "version": "4.12.1",
+      "release": "ingress-nginx",
+      "namespace": "ingress-nginx",
+      "service_type": "ClusterIP",
+      "admission_webhooks_enabled": false,
+      "resources": {
+          "requests": {
+          "cpu": "50m",
+          "memory": "64Mi"
+        },
+      "limits": {
+      "cpu": "100m",
+      "memory": "128Mi"
+        }
       }
+  }
     },
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:checkSecretUsage": true,
