@@ -1,28 +1,47 @@
 #!/usr/bin/env python3
-import os
-
 import aws_cdk as cdk
 
-from eks_custom_resource_cdk.eks_custom_resource_cdk_stack import EksCustomResourceCdkStack
+from eks_custom_resource_cdk.platform_stack import PlatformStack
 
 
 app = cdk.App()
-EksCustomResourceCdkStack(app, "EksCustomResourceCdkStack",
-    # If you don't specify 'env', this stack will be environment-agnostic.
-    # Account/Region-dependent features and context lookups will not work,
-    # but a single synthesized template can be deployed anywhere.
 
-    # Uncomment the next line to specialize this stack for the AWS Account
-    # and Region that are implied by the current CLI configuration.
+platform_config = app.node.try_get_context("platform")
 
-    #env=cdk.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION')),
-
-    # Uncomment the next line if you know exactly what Account and Region you
-    # want to deploy the stack to. */
-
-    #env=cdk.Environment(account='123456789012', region='us-east-1'),
-
-    # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
+if not platform_config:
+    raise ValueError(
+        "Missing 'platform' context in cdk.json. "
+        "Check your cdk.json configuration."
     )
+
+env_name = app.node.try_get_context("env") or "development"
+
+valid_envs = list(platform_config["environments"].keys())
+
+if env_name not in valid_envs:
+    raise ValueError(
+        f"Invalid environment '{env_name}'. "
+        f"Must be one of: {valid_envs}"
+    )
+
+aws_env = cdk.Environment(
+    account=app.node.try_get_context("account"),
+    region=app.node.try_get_context("region") or "eu-west-1",
+)
+
+PlatformStack(
+    app,
+    f"SwisscomPlatformStack-{env_name.capitalize()}",
+    env_name=env_name,
+    platform_config=platform_config,
+    env=aws_env,
+    description=f"Swisscom iAWS Platform EKS Stack - {env_name}",
+)
+
+cdk.Tags.of(app).add("Project", platform_config["project_name"])
+cdk.Tags.of(app).add("ManagedBy", "cdk")
+cdk.Tags.of(app).add("Team", "platform-engineering")
+cdk.Tags.of(app).add("Environment", env_name)
+cdk.Tags.of(app).add("Owner", "maaham.banu")
 
 app.synth()
