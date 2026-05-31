@@ -8,5 +8,10 @@
     "development": "977181921412",
     "staging": "977181921412",
     "production": "135808925550"
-  }
+  },
+  "availability-zones:account=135808925550:region=eu-west-1": [
+    "eu-west-1a",
+    "eu-west-1b",
+    "eu-west-1c"
+  ]
 }
