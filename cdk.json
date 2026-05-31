@@ -46,7 +46,8 @@
         "handler": "helm_config.handler.on_event",
         "timeout_seconds": 30,
         "memory_size": 128,
-        "log_level": "INFO"
+        "log_level": "INFO",
+        "tracing_enabled": true
       },
       "ingress_nginx": {
       "repository": "https://kubernetes.github.io/ingress-nginx",

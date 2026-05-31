@@ -106,6 +106,11 @@ class PlatformStack(Stack):
             ),
             memory_size=platform_config["lambda"]["memory_size"],
             log_retention=log_retention,
+            tracing=(                                        
+                lambda_.Tracing.ACTIVE
+                if platform_config["lambda"]["tracing_enabled"]
+                else lambda_.Tracing.DISABLED
+            ), 
             environment={
                 "PARAMETER_NAME": parameter_name,
                 "LOG_LEVEL": platform_config["lambda"]["log_level"],
