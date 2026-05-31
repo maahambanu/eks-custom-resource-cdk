@@ -3,5 +3,10 @@
     "eu-west-1a",
     "eu-west-1b",
     "eu-west-1c"
-  ]
+  ],
+  "account_mapping": {
+    "development": "977181921412",
+    "staging": "977181921412",
+    "production": "135808925550"
+  }
 }

@@ -5,6 +5,7 @@ from aws_cdk import (
     CustomResource,
     Duration,
     Stack,
+    aws_cloudwatch as cloudwatch,
     aws_ec2 as ec2,
     aws_eks as eks,
     aws_lambda as lambda_,
@@ -45,12 +46,16 @@ class PlatformStack(Stack):
         project_name = platform_config["project_name"]
         parameter_name = platform_config["ssm_parameter_name"]
 
+        log_retention = LOG_RETENTION_MAPPING[
+            environment_config["log_retention_days"]
+        ]
+
         env_parameter = ssm.StringParameter(
             self,
             "AccountEnvironmentParameter",
             parameter_name=parameter_name,
             string_value=env_name,
-            description="Platform account environment",
+            description="Platform account environment used by the Helm config Lambda",
         )
 
         vpc = ec2.Vpc(
@@ -74,6 +79,7 @@ class PlatformStack(Stack):
             vpc=vpc,
             default_capacity=0,
             endpoint_access=eks.EndpointAccess.PUBLIC_AND_PRIVATE,
+            authentication_mode=eks.AuthenticationMode.API_AND_CONFIG_MAP,
         )
 
         node_group = cluster.add_nodegroup_capacity(
@@ -99,9 +105,7 @@ class PlatformStack(Stack):
                 platform_config["lambda"]["timeout_seconds"]
             ),
             memory_size=platform_config["lambda"]["memory_size"],
-            log_retention=LOG_RETENTION_MAPPING[
-                environment_config["log_retention_days"]
-            ],
+            log_retention=log_retention,
             environment={
                 "PARAMETER_NAME": parameter_name,
                 "LOG_LEVEL": platform_config["lambda"]["log_level"],
@@ -111,13 +115,37 @@ class PlatformStack(Stack):
 
         env_parameter.grant_read(helm_config_function)
 
+        cloudwatch.Alarm(
+            self,
+            "HelmConfigLambdaErrors",
+            alarm_name=f"{project_name}-{env_name}-helm-config-errors",
+            alarm_description="HelmConfig Lambda failed during deployment",
+            metric=helm_config_function.metric_errors(
+                period=Duration.minutes(5)
+            ),
+            threshold=1,
+            evaluation_periods=1,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+
+        cloudwatch.Alarm(
+            self,
+            "HelmConfigLambdaDuration",
+            alarm_name=f"{project_name}-{env_name}-helm-config-duration",
+            alarm_description="HelmConfig Lambda execution time is unusually high",
+            metric=helm_config_function.metric_duration(
+                period=Duration.minutes(5)
+            ),
+            threshold=5000,
+            evaluation_periods=1,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+
         provider = cr.Provider(
             self,
             "HelmConfigProvider",
             on_event_handler=helm_config_function,
-            log_retention=LOG_RETENTION_MAPPING[
-                environment_config["log_retention_days"]
-            ],
+            log_retention=log_retention,
         )
 
         helm_config_resource = CustomResource(
@@ -166,19 +194,37 @@ class PlatformStack(Stack):
         ingress_chart.node.add_dependency(node_group)
         ingress_chart.node.add_dependency(helm_config_resource)
 
-        CfnOutput(self, "ClusterName", value=cluster.cluster_name)
-        CfnOutput(self, "ClusterArn", value=cluster.cluster_arn)
+        CfnOutput(
+            self,
+            "ClusterName",
+            value=cluster.cluster_name,
+            description="EKS cluster name used to configure kubectl",
+        )
+
+        CfnOutput(
+            self,
+            "ClusterArn",
+            value=cluster.cluster_arn,
+            description="ARN of the EKS cluster",
+        )
 
         CfnOutput(
             self,
             "EnvironmentParameterName",
             value=env_parameter.parameter_name,
+            description="SSM parameter storing the current account environment",
         )
 
-        CfnOutput(self, "Environment", value=env_name)
+        CfnOutput(
+            self,
+            "Environment",
+            value=env_name,
+            description="Environment deployed by this stack",
+        )
 
         CfnOutput(
             self,
             "HelmConfigFunctionArn",
             value=helm_config_function.function_arn,
+            description="Lambda function that generates Helm values from SSM",
         )
