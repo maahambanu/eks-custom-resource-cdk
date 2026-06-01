@@ -45,6 +45,23 @@ Amazon EKS
 The Lambda function retrieves the environment value from Parameter Store and dynamically generates the Helm values consumed by the ingress-nginx Helm chart.
  
 ---
+## Multi-Account Strategy
+
+This solution is designed for a multi-account AWS setup:
+
+| Account | Purpose | Environments |
+|---------|---------|--------------|
+| Non-Production (swisscom-nonprod) | Development and staging workloads | development, staging |
+| Production (swisscom-prod) | Production workloads only | production |
+
+The same CDK code deploys to both accounts. Environment
+behaviour is driven entirely by the SSM parameter value
+pre-configured in each account — the code never changes
+between accounts.
+
+In a real Swisscom setup this parameter would be set
+automatically during account vending. Here it is created
+as part of the stack to simulate that pattern.
  
 ## Project Structure
  
@@ -122,7 +139,8 @@ Example output:
 ```text
 5 passed
 ```
- 
+ <img width="941" height="224" alt="test results" src="https://github.com/user-attachments/assets/dc4667c0-9336-45f1-afc0-eddeaad7c817" />
+
 ---
  
 ## Deployment
@@ -136,13 +154,17 @@ cdk deploy \
 -c region=eu-west-1 \
 --profile swisscom-nonprod
 ```
- 
+<img width="640" height="97" alt="describe stack" src="https://github.com/user-attachments/assets/3e4d3e59-694c-4cc6-9fea-c665de20b0c1" />
+<img width="950" height="224" alt="Screenshot 2026-05-31 123300" src="https://github.com/user-attachments/assets/9dd7126b-1b0e-4aa4-a800-d6b1e05a4027" />
+
+
 Expected result:
  
 ```text
 controller.replicaCount = 1
 ```
- 
+ <img width="911" height="59" alt="dev-replica" src="https://github.com/user-attachments/assets/ecd74875-1b56-44cc-9e4a-6d665a2335ee" />
+
 ### Staging
  
 ```bash
@@ -158,6 +180,8 @@ Expected result:
 ```text
 controller.replicaCount = 2
 ```
+<img width="814" height="119" alt="pods" src="https://github.com/user-attachments/assets/b8881a66-a910-496b-aef6-36cc9b21444f" />
+
  
 ### Production
  
@@ -203,7 +227,8 @@ Verify ingress-nginx pods:
 ```bash
 kubectl get pods -n ingress-nginx
 ```
- 
+ <img width="538" height="94" alt="SSM parameter" src="https://github.com/user-attachments/assets/85e6bcbb-ad1f-4a42-ae32-d1b838be0b1d" />
+
 ---
  
 ## Monitoring
@@ -218,6 +243,11 @@ The Lambda function also emits structured logs to CloudWatch for:
 * Parameter retrieval
 * Helm value generation
 * Custom Resource lifecycle events
+<img width="950" height="394" alt="lambda tail logs" src="https://github.com/user-attachments/assets/8ca6843a-8d93-493a-b3e5-c483defacfa3" />
+<img width="743" height="235" alt="Lambda cloudwatch events" src="https://github.com/user-attachments/assets/64ea746e-26b9-491f-9033-38ec13dad642" />
+<img width="946" height="442" alt="log groups" src="https://github.com/user-attachments/assets/20987f7a-df39-47b9-928c-364ead4076cd" />
+<img width="939" height="299" alt="Logstreams" src="https://github.com/user-attachments/assets/ccc657d9-f10d-4336-b76e-24f242022e7d" />
+
 ---
  
 ## Security
@@ -229,7 +259,69 @@ The solution implements:
 * EKS Access Entries
 * EKS Access Policies
 * Separate AWS accounts for Production and Non-Production workloads
+
+### Network Isolation
+
+The EKS cluster is deployed inside a dedicated VPC.
+
+Benefits include:
+
+- Network segmentation
+- Security Groups
+- Private Subnets
+- Controlled outbound internet access through NAT Gateway
+- Separation from other workloads
+
+#### Least Privilege
+__Example 1: Least Privilege for SSM__
+
+```
+env_parameter.grant_read(helm_config_function)
+```
+Lambda can:
+✓ Read exactly one parameter
+
+Lambda cannot:
+✗ Create parameters
+✗ Delete parameters
+✗ Read all parameters
+✗ Access Secrets Manager
+✗ Access other AWS services
+
+__Example 2: Lambda doesn't have admin permissions__
+
+```
+GetParameter
+```
+It does not need:
+```
+eks:*
+ec2:*
+iam:*
+cloudformation:*
+```
+__Example 3: Dedicated SSM Parameter__
+Instead of:
+```
+/platform/*
+```
+I used:
+```
+/platform/account/env
+```
+To prevent Lambda from reading every platform parameter.
+
+__Example 4: EKS Access Policies__
+We granted only to the principal that is required:
+```
+aws eks create-access-entry
+aws eks associate-access-policy
+AmazonEKSClusterAdminPolicy
+```
+
+
 ---
+
  
 ## Design Decisions
  
@@ -249,9 +341,22 @@ Helm provides a standard mechanism for packaging and deploying Kubernetes applic
  
 ingress-nginx is a commonly used ingress controller and serves as a realistic platform component for demonstrating environment-specific configuration.
  
-### Why AWS CDK?
- 
-AWS CDK enables Infrastructure as Code using Python while maintaining CloudFormation compatibility and repeatability.
+### Why Configuration Was Isolated from Infrastructure
+
+The platform was designed with a clear separation of concerns between infrastructure provisioning, configuration management, and application deployment.
+
+AWS CDK is responsible for provisioning infrastructure resources such as networking, EKS, IAM, Lambda, and monitoring. Environment-specific behaviour is externalized through configuration and Parameter Store rather than being embedded directly in the infrastructure code. This enables the same stack to be deployed consistently across multiple environments while allowing environment-specific customization.
+
+This approach provides several benefits:
+
+- Reusable infrastructure code
+- Reduced duplication across environments
+- Easier operational management
+- Improved maintainability
+- Lower risk of configuration drift
+- Better alignment with platform engineering best practices
+
+The Lambda-backed Custom Resource further reinforces this pattern by dynamically generating Helm configuration at deployment time, allowing Kubernetes deployments to adapt to the target environment without modifying the underlying infrastructure definitions.
  
 ---
  
