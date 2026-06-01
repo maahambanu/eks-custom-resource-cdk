@@ -56,7 +56,7 @@ This solution is designed for a multi-account AWS setup:
 
 The same CDK code deploys to both accounts. Environment
 behaviour is driven entirely by the SSM parameter value
-pre-configured in each account — the code never changes
+pre-configured in each account, the code never changes
 between accounts.
 
 In a real Swisscom setup this parameter would be set
