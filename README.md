@@ -198,6 +198,8 @@ Expected result:
 ```text
 controller.replicaCount = 2
 ```
+<img width="874" height="104" alt="image" src="https://github.com/user-attachments/assets/8fbda6d9-5d27-4506-95a9-94529b6bdc50" />
+
  
 ---
  
